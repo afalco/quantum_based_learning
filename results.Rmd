@@ -1,0 +1,252 @@
+---
+title: "Results, tables and graphs"
+output:
+  pdf_document:
+    toc: yes
+    highlight: tango
+toc-title: Variables
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+wd <- ""
+
+# if you wanted to run the analysis code (1000 iterations) change the 
+# value of the variable doAll to TRUE. It may take a few minutes
+doAll = FALSE
+```
+
+```{r , echo = FALSE}
+pacman::p_load(gt, ROCR, kableExtra, ks, latex2exp)
+
+load(paste0(wd, "results_analysis.RData"))
+load(paste0(wd, "results_dist_diff.RData"))
+load(paste0(wd, "example_coordinates.RData"))
+setwd(wd)
+```
+
+```{bash , echo = FALSE, eval =  doAll}
+./new_analysis.R
+```
+
+# Distribution of the polar coordinates 
+
+An example (among the 1000 analyses performed) of the distribution
+of the polar coordinates of the test set.
+
+```{r , echo=FALSE, fig.height = 5, fig.width= 6}
+plot(polar_coor[polar_coor$group == "model","theta"],
+     polar_coor[polar_coor$group == "model","rho"],
+     xlim = c(-0.7,0.7), ylim=c(0.5,0.85),
+     col = as.numeric(polar_coor[polar_coor$group == "model", "response"]) + 3, 
+     ylab=TeX(r"($r$)"), xlab=TeX(r"($\theta$)"))
+legend("bottomleft", legend= c("Not Diagnosed", "Diagnosed"), fil = c(3,4))
+```
+
+# Density functions 
+
+## Using the two polar coordinates
+
+An example of the density functions.
+
+- No diagnosed class (0)
+
+
+```{r , echo = FALSE}
+den_class0 <- kde(polar_coor[polar_coor$group == "model" 
+                             & polar_coor$response == "0", c(1,2)])
+
+image(den_class0$eval.points[[1]], den_class0$eval.points[[2]],
+      den_class0$estimate, xlim = c(-0.8, 0.65), ylim = c(0.55, 0.95), 
+      ylab=TeX(r"($r$)"), xlab=TeX(r"($\theta$)"))
+```
+
+- Diagnosed class (1)
+
+
+```{r , echo = FALSE}
+den_class1 <- kde(polar_coor[polar_coor$group == "model" 
+                             & polar_coor$response == "1", c(1,2)])
+
+image(den_class1$eval.points[[1]], den_class1$eval.points[[2]],
+      den_class1$estimate, xlim = c(-0.8, 0.65), ylim = c(0.55, 0.95), 
+      ylab=TeX(r"($r$)"), xlab=TeX(r"($\theta$)"))
+```
+
+
+## Using only the $\theta$ coordinate  
+
+An example of the density functions.
+
+
+```{r , echo = FALSE}
+den_class0 <- density(polar_coor[polar_coor$group == "model" 
+                                 & polar_coor$response == "0", "theta"], 
+                      kernel = "epanechnikov")
+den_class1 <- density(polar_coor[polar_coor$group == "model" 
+                                 & polar_coor$response == "1", "theta"], 
+                      kernel = "epanechnikov")
+
+plot(NULL, xlim=c(-1,1), ylim=c(0,3), type="n", xlab=TeX(r"($\theta$)"),
+     ylab=TeX(r"($f(\theta$|$y)$)"))
+lines(den_class1, col="deepskyblue",type="p")
+lines(den_class0,col="green",type="p")
+text(-0.7, 2.5, "Diagnosed")
+text(0.35,2.5, "Not Diagnosed")
+```
+
+
+# Average Confusion matrix
+
+## Using the two polar coordinates 
+
+
+```{r, echo= FALSE }
+mean_two_cm <- round(apply(confusion_matrix_two_coor, 2, mean), digits = 4)
+
+matrix <- cbind(c(mean_two_cm[1], mean_two_cm[3]), c(mean_two_cm[2], 
+                                                     mean_two_cm[4]), 
+                c("Real classification", "Real classification"), 
+                c("Not diagnosed", "Diagnosed"))
+colnames(matrix) = c("no_dx", "dx", "class", "names")
+rownames(matrix) = c("Not diagnosed", "Diagnosed")
+
+matrix  %>% gt(rowname_col = "names", groupname_col = "class") %>%
+  cols_label(
+    no_dx = md("Not diagnosed "),
+    dx = md("Diagnosed")
+  ) %>% 
+  tab_spanner(label = "Predicted classification", columns = c(no_dx, dx)) 
+```
+
+## Using only the $\theta$ coordinate  
+```{r, echo= FALSE }
+mean_theta_cm <- round(apply(confusion_matrix_theta, 2, mean), digits = 4)
+
+matrix <- cbind(c(mean_theta_cm[1], mean_theta_cm[3]), 
+                c(mean_theta_cm[2], mean_theta_cm[4]), 
+                c("Real classification", "Real classification"), 
+                c("Not diagnosed", "Diagnosed"))
+colnames(matrix) = c("no_dx", "dx", "class", "names")
+rownames(matrix) = c("Not diagnosed", "Diagnosed")
+
+matrix  %>% gt(rowname_col = "names", groupname_col = "class") %>%
+  cols_label(
+    no_dx = md("Not diagnosed "),
+    dx = md("Diagnosed")
+  ) %>% 
+  tab_spanner(label = "Predicted classification", columns = c(no_dx, dx)) 
+```
+
+# ROC curve averaged using the vertical averaging method
+## Using the two polar coordinates 
+
+The ROC curve of 1000 analyses was averaged using the two coordinates as 
+predictors. The bars show 95% confidence intervals.
+
+
+```{r, echo= FALSE }
+pred <- ROCR::prediction(dist_diff_two_coor$score, 
+                         dist_diff_two_coor$class)
+perf <- ROCR::performance(pred,'tpr','fpr')
+
+ROCR::plot(perf,
+     spread.estimate='stddev',
+     avg='vertical',
+     spread.scale=2, # to generate a confidence interval of approximately 95%
+     col='black', ylab = "Average sensitivity", xlab = "1 - specificity")
+
+AUC <- performance(pred, measure = "auc")
+AUC_mean_two <- mean(as.numeric(AUC@y.values))
+```
+
+
+## Using only the $\theta$ coordinate  
+
+The ROC curve of 1000 analyses was averaged using the $\theta$ coordinate 
+as predictors. The bars show 95% confidence intervals. 
+
+
+```{r, echo= FALSE }
+pred <- ROCR::prediction(dist_diff_theta$score, 
+                         dist_diff_theta$class)
+perf <- ROCR::performance(pred,'tpr','fpr')
+
+ROCR::plot(perf,
+     spread.estimate='stddev',
+     avg='vertical',
+     spread.scale=2, # to generate a confidence interval of approximately 95%
+     col='black', ylab = "Average sensitivity", xlab = "1 - specificity")
+
+AUC <- performance(pred, measure = "auc")
+AUC_mean_theta <- mean(as.numeric(AUC@y.values))
+```
+
+# Precision/Recall graph averaged using the vertical averaging method
+
+## Using the two polar coordinates 
+
+The Precision-Recall curve of 1000 analyses was averaged using the two coordinates
+as predictors. The bars show 95% confidence intervals. 
+
+
+```{r , echo = FALSE}
+pred <- ROCR::prediction(dist_diff_two_coor$score, dist_diff_two_coor$class)
+perf <- performance(pred, "prec", "rec")
+plot(perf,
+     spread.estimate='stddev',
+     avg='vertical',
+     spread.scale=2, # to generate a confidence interval of approximately 95%
+     col='black', 
+     ylab = "Average positive predictive value", xlab = "Sensitivity")
+```
+
+## Using only the $\theta$ coordinate 
+
+
+The Precision-Recall curve of 1000 analyses was averaged using the $\theta$ 
+coordinate as predictors. The bars show 95% confidence intervals. 
+
+
+```{r, echo= FALSE }
+pred <- ROCR::prediction(dist_diff_theta$score, dist_diff_theta$class)
+perf <- performance(pred, "prec", "rec")
+plot(perf,
+     spread.estimate='stddev',
+     avg='vertical',
+     spread.scale=2, # to generate a confidence interval of approximately 95%
+     col='black', 
+     ylab = "Average positive predictive value", xlab = "Sensitivity")
+```
+
+
+
+# Average of other predictive parameters 
+
+```{r, echo= FALSE}
+mean_predict_value_two <- round(apply(prediction_parameters_two_coor, 2, mean), 
+                           digits = 4)
+mean_predict_value_two <- c(mean_two_cm["TP"], mean_two_cm["TN"], 
+                            mean_predict_value_two, 
+                            round(AUC_mean_two, digits = 4))
+
+mean_predict_value_theta <- round(apply(prediction_parameters_theta, 2, mean), 
+                            digits = 4)
+mean_predict_value_theta <- c(mean_theta_cm["TP"], mean_theta_cm["TN"], 
+                            mean_predict_value_theta, AUC_mean_theta)
+
+names(mean_predict_value_two) <- c("Sensitivity", "Specificity", 
+                                   "Negative Predictive Value", 
+                                   "Positive predictive value", 
+                                   "Accuracy", "F1 Score", 
+                                   "Cohen's kappa coefficient",
+                                   "Matthews correlation coefficient",
+                                   "Area under the ROC curve")
+names(mean_predict_value_theta) <- names(mean_predict_value_two)
+
+table <- data.frame(mean_predict_value_two, mean_predict_value_theta)
+colnames(table) <- c("Two coordinates", "$\theta$ coordinate only")
+kable(table, col.names = c("Two coordinates", "Theta coordinate only"))
+```
+
+
